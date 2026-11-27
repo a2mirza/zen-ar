@@ -17,9 +17,13 @@ Local: `python3 -m http.server 8771`, open http://localhost:8771.
 - **Android (ARCore):** WebXR `immersive-ar` + hit-test + dom-overlay, real table tracking (`startTable(aScene,false)`).
   Framebuffer scale raised to native for sharpness. Chrome's AR camera appears to be fixed-focus, so close-up cards blur;
   the copy asks for arm's length.
-- **iPhone / no WebXR:** "look" mode (`startTable(aScene,true)`): camera video background + device-orientation 3DoF,
-  virtual table at 0.75 m, user taps to set the spot. No card tracking on iOS (by design). True iOS AR would need an
-  ARKit App Clip or Unity AR Foundation.
+- **iPhone / no WebXR:** card mode (`startTable(aScene,'card')`, chosen 2026-11-27 after gyro-only look mode floated
+  and drifted on device): user photographs the card, MindAR compiles it in-browser and tracks it; the table station is
+  anchored beside the card (station = target matrix * Rx(90) * scale SCL/CW, SCL=.45, platform beyond the card's top edge).
+  When the card leaves view the motion sensor holds the pose (3DoF) until it is seen again. Taps use window pointer
+  events with a forgiving hit radius plus a DOM perk-chip row (`#xchips`), since Safari dropped canvas clicks.
+  Old gyro "look" mode (`startTable(null,true)`) still exists but is no longer reached. True 6DoF iOS AR would need an
+  ARKit App Clip, AR Quick Look, or a paid web SLAM SDK.
 - Legacy card-image mode (MindAR, `build()`) still exists but is not the main path.
 
 ## Code map (index.html is everything, ~1340 lines; main script is wrapped in a block `{ ... }`, so top-level
@@ -50,6 +54,9 @@ Local: `python3 -m http.server 8771`, open http://localhost:8771.
 Archia font (fonts/), real zen logo (zen-logo.svg). Colours: digiteal #006D5A, green #00BD5F, emerald #055D37,
 lush/mint #CEE9D8, dark #322D3C. Lowercase copy. Modern, clean, not "typical AI design"; subtle gradients, no noise,
 no ripple overlays on UI. Everything should feel high-end (premium materials even where contrast is needed).
+
+## Phone testing
+GitHub Pages from `a2mirza/zen-ar` main: https://a2mirza.github.io/zen-ar/ (sim at /sim.html). Push to main = redeploy in ~1 min.
 
 ## Testing
 `node tools/preview.js` (needs puppeteer) walks look mode and saves screenshots to `tools/shots/`. Headless

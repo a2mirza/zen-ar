@@ -90,6 +90,7 @@ h1{font-weight:600;letter-spacing:-.5px;font-size:clamp(34px,10vw,44px);line-hei
 .chips.on{display:flex}.chips::-webkit-scrollbar{display:none}
 .chip{flex:none;appearance:none;border:1px solid var(--line);background:#EEF8F2;color:var(--teal);border-radius:20px;min-height:40px;padding:0 14px;font-size:14px;font-weight:500;white-space:nowrap}
 .chip:active{background:var(--lush)}
+.a-enter-vr,.a-enter-ar,.a-enter-vr-button,.a-enter-ar-button,.a-orientation-modal{display:none!important}
 #snd{position:fixed;left:14px;bottom:calc(63px + env(safe-area-inset-bottom));z-index:60;width:46px;height:46px;border-radius:23px;border:0;background:rgba(255,255,255,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:grid;place-items:center;box-shadow:0 6px 20px rgba(20,40,30,.14);padding:0}
 #snd{display:none} body:has(#hud.on) #snd,body:has(#xrui.on) #snd{display:grid}
 #snd svg{width:22px;height:22px} #snd .x{display:none} #snd.off .w{display:none} #snd.off .x{display:block}
@@ -104,7 +105,7 @@ h1{font-weight:600;letter-spacing:-.5px;font-size:clamp(34px,10vw,44px);line-hei
   <ol class="list">
     <li><i>1</i>take a quick photo of your new card</li>
     <li><i>2</i>lay it on a table and point your phone at it</li>
-    <li><i>3</i>place it where the outline glows</li>
+    <li><i>3</i>watch the table open up beside it</li>
     <li><i>4</i>tap a perk and watch it rise from the table</li>
   </ol>
   <p class="note" id="devnote">best in chrome on android, at a table. any card works for this preview.</p>
@@ -155,8 +156,7 @@ const LOGO = new Image(); LOGO.src = 'zen-logo.svg';
 let stream = null, targetURL = null;
 const wait = ms => new Promise(r=>setTimeout(r,ms));
 let actx=null, xrOK=false, inXR=false;
-if(navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-ar').then(v=>{ xrOK=v; if(!v){ $('devnote').textContent='on this phone, just stand by a table and turn your phone to look around.';
-      document.querySelector('.list').innerHTML='<li><i>1</i>point your phone down at your table</li><li><i>2</i>tap to set your spot, then lay your card in the outline</li><li><i>3</i>watch the table open up for you</li><li><i>4</i>tap a perk to see what rises out of it</li>';
+if(navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-ar').then(v=>{ xrOK=v; if(!v){ $('devnote').textContent='works best at a table, in good light.';
       document.querySelector('h1').textContent='welcome to zen. your card is ready.'; $('go').textContent='open my welcome'; } }).catch(()=>{});
 function beep(freqs=[880,1320], dur=.09){ try{ ZA.note(freqs,dur); }catch(e){} }
 /* ---------------- sound: calm lounge music, soft ui taps, opening chimes and per-scene ambience ---------------- */
@@ -255,9 +255,7 @@ addEventListener('click',e=>{ if(e.target.closest&&e.target.closest('button')) Z
 
 /* ---------------- step 1: snap any card ---------------- */
 $('go').onclick = async () => {
-  if(!xrOK){ try{ actx=ZA.ctx()||actx; actx&&actx.resume(); ZA.startMusic(); }catch(e){}
-    try{ if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); }catch(e){}
-    startLook(); return; }
+  // iphone (no webxr) also starts by photographing the card: it becomes the tracking target that anchors the table
   try {
     try{ actx=ZA.ctx()||actx; actx&&actx.resume(); ZA.startMusic(); }catch(e){}
     try{ if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); }catch(e){}
@@ -296,7 +294,7 @@ async function learn(dataURL){
     if(targetURL) URL.revokeObjectURL(targetURL);
     targetURL = URL.createObjectURL(new Blob([buf]));
     try { await Promise.race([Promise.all(['400','500','600','700'].map(w=>document.fonts.load(w+' 40px Archia'))).then(()=>LOGO.decode()), new Promise(r=>setTimeout(r,2500))]); } catch(e){}
-    startAR(img.height / img.width);
+    startAR(img.height / img.width, !xrOK);
   } catch(e){ console.error(e); fail('that photo came out a little dark. try again with more light and the card filling the frame.'); show('intro'); }
 }
 
@@ -1066,7 +1064,7 @@ INFO.forEach(d=>{ const f=d.build; d.build=w=>{ const r=f(w); if(!w) addMarquee(
 
 window.__zz={person,P,box,studioEnv,emblem,acrylic,INFO,get PLANE(){ return PLANE; }};
 /* ---------------- step 3: the ar experience ---------------- */
-function startAR(ar){
+function startAR(ar, cardTable){
   $('arwrap').innerHTML = `
   <a-scene mindar-image="imageTargetSrc: ${targetURL}; uiScanning: no; uiLoading: no; uiError: no; filterMinCF: 0.0001; filterBeta: 0.01; missTolerance: 12; warmupTolerance: 2"
     color-space="sRGB" renderer="colorManagement: true; alpha: true; antialias: true" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false" embedded style="position:absolute;inset:0;width:100%;height:100%">
@@ -1089,10 +1087,10 @@ function startAR(ar){
   const camWatch=setInterval(()=>{ const v=camVideo(); if(!v){ clearInterval(camWatch); return; } ensurePlaying();
     $('camBtn').classList.toggle('on', v.paused && v.readyState>=1); },700);
   addEventListener('orientationchange',()=>setTimeout(relayout,400));
-  const go = () => build(scene, target, ar);
+  const go = () => cardTable ? startTable(scene, 'card') : build(scene, target, ar);
   scene.hasLoaded ? go() : scene.addEventListener('loaded', go);
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
-  $('hud').classList.add('on');
+  if(!cardTable) $('hud').classList.add('on');
 }
 
 function build(scene, target, ar){
@@ -1329,6 +1327,8 @@ async function startLook(){ return startTable(null,true); }
    look=false: android, real arcore tracking (walk around the table)
    look=true : iphone, motion sensor + a virtual tabletop where you point (turn to look around it) */
 async function startTable(aScene, look){
+  // look==='card': iphone. mindar tracks the photographed card and the whole table station is anchored beside it
+  const track=look==='card';
   let session=null, camStream=null, lookVid=null;
   if(!look){
     try{ const v=document.querySelector('#arwrap video'); v && v.srcObject && v.srcObject.getTracks().forEach(t=>t.stop()); }catch(e){}
@@ -1336,7 +1336,8 @@ async function startTable(aScene, look){
     try{ session = await navigator.xr.requestSession('immersive-ar',{requiredFeatures:['local-floor','hit-test'],optionalFeatures:['dom-overlay'],domOverlay:{root:$('xrui')}}); }
     catch(e){ console.error(e); xrOK=false; fail('table mode isn\'t available on this phone. tap restart to try again.'); return; }
     inXR=true;
-  } else {
+  } else if(track){ inXR=true; }
+  else {
     lookVid=document.createElement('video'); lookVid.setAttribute('playsinline',''); lookVid.setAttribute('webkit-playsinline',''); lookVid.muted=true; lookVid.autoplay=true;
     lookVid.style.cssText='position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;background:#CEE9D8'; document.body.appendChild(lookVid);
     try{ camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false}); lookVid.srcObject=camStream; lookVid.play().catch(()=>{}); }
@@ -1344,7 +1345,7 @@ async function startTable(aScene, look){
     inXR=true;   // pauses the card-mode loop; this loop drives everything
   }
   tweens=[]; loops.clear();
-  $('arwrap').innerHTML=''; document.querySelectorAll('.screen').forEach(sc=>sc.classList.remove('on')); $('hud').classList.remove('on'); $('xrui').classList.add('on');
+  if(!track) $('arwrap').innerHTML=''; document.querySelectorAll('.screen').forEach(sc=>sc.classList.remove('on')); $('hud').classList.remove('on'); $('xrui').classList.add('on');
   const say=(label,txt)=>{ $('xlabel').textContent=label; $('xhint').textContent=txt; };
   const steps=n=>[...$('xsteps').children].forEach((el,k)=>el.classList.toggle('on',k<n));
   $('xrui').addEventListener('beforexrselect',e=>e.preventDefault());
@@ -1358,8 +1359,9 @@ async function startTable(aScene, look){
     try{ const nf=window.XRWebGLLayer&&XRWebGLLayer.getNativeFramebufferScaleFactor?XRWebGLLayer.getNativeFramebufferScaleFactor(session):1; renderer.xr.setFramebufferScaleFactor(Math.max(1,Math.min(nf,1.6))); }catch(e){}
     await renderer.xr.setSession(session); }
   const xs=new THREE.Scene(), cam=new THREE.PerspectiveCamera(look?62:60,innerWidth/innerHeight,.01,200);
-  const EYE=1.35, TABLE=.75; if(look){ cam.position.set(0,EYE,0); xs.add(cam); }
-  const onResize=()=>{ renderer.setSize(innerWidth,innerHeight); cam.aspect=innerWidth/innerHeight; cam.updateProjectionMatrix(); }; if(look) addEventListener('resize',onResize);
+  const EYE=1.35, TABLE=.75; if(look&&!track){ cam.position.set(0,EYE,0); xs.add(cam); }
+  if(track) cam.matrixAutoUpdate=false;
+  const onResize=()=>{ renderer.setSize(innerWidth,innerHeight); cam.aspect=innerWidth/innerHeight; if(!track) cam.updateProjectionMatrix(); }; if(look) addEventListener('resize',onResize);
   xs.add(new THREE.HemisphereLight(0xffffff,0xCEE9D8,1.3)); xs.add(new THREE.AmbientLight(0xffffff,.6));
   const sun=new THREE.DirectionalLight(0xffffff,2.2); sun.position.set(1,3,1.5); xs.add(sun);
   { const env=studioEnv(renderer); if(env) xs.environment=env; }
@@ -1420,8 +1422,27 @@ async function startTable(aScene, look){
 
   let state='table', lastHit=null, tT=0, last=performance.now(), current=null;
   const vp=V(0,0,0), vq=new THREE.Quaternion();
-  const TXT={ find:look?'point your phone down at your table':'point your phone at a table and move it slowly', explore:look?'tap a card, or pick a perk below':'tap a card, or touch your phone to it', around:look?'turn your phone to look around it':'walk around the table to look closer' };
-  steps(1); say('step 1 of 3 · find a table',TXT.find);
+  const TXT={ find:track?'lay your card flat on the table, top edge away from you, and point your phone at it':look?'point your phone down at your table':'point your phone at a table and move it slowly', explore:look?'tap a card, or pick a perk below':'tap a card, or touch your phone to it', around:look?'turn your phone to look around it':'walk around the table to look closer' };
+  steps(1); say(track?'step 1 of 3 · find your card':'step 1 of 3 · find a table',TXT.find);
+
+  // ---- card anchoring (iphone): station pose follows the tracked card; when the card drops out of view the motion sensor holds it ----
+  const SCL=.45, CARDFIX=new THREE.Matrix4().makeRotationX(Math.PI/2).multiply(new THREE.Matrix4().makeScale(SCL/CW,SCL/CW,SCL/CW));
+  let seen=false, csnap=true, chold=null, lostT=null; const _M=new THREE.Matrix4(), _p=V(0,0,0), _q=new THREE.Quaternion(), _s=V(1,1,1), _qd=new THREE.Quaternion(), _dl=new THREE.Quaternion();
+  const tgt=track?aScene.querySelector('#target'):null;
+  if(track){ guide.visible=false; traceCard.forEach(r=>r.scale.setScalar(1/SCL)); traceCard[1].visible=false;
+    tgt.addEventListener('targetFound',()=>{ seen=true; chold=null; clearTimeout(lostT); if(state!=='table') say($('xlabel').textContent,state==='cards'?TXT.explore:state==='scene'?TXT.around:$('xhint').textContent); });
+    tgt.addEventListener('targetLost',()=>{ seen=false; if(ori) chold={p:station.position.clone(),q:station.quaternion.clone(),qd:devQ(new THREE.Quaternion())};
+      clearTimeout(lostT); lostT=setTimeout(()=>{ if(!seen && state!=='table') $('xhint').textContent='point back at your card to lock the table in place'; },1500); }); }
+  function syncCard(){ const ac=aScene.camera; if(!ac) return; ac.updateMatrixWorld();
+    cam.projectionMatrix.copy(ac.projectionMatrix); cam.projectionMatrixInverse.copy(ac.projectionMatrix).invert();
+    cam.matrix.copy(ac.matrixWorld); cam.matrix.decompose(cam.position,cam.quaternion,cam.scale); cam.matrixWorld.copy(cam.matrix); cam.matrixWorldInverse.copy(cam.matrix).invert();
+    if(seen){ tgt.object3D.updateMatrixWorld(true); _M.copy(tgt.object3D.matrixWorld).multiply(CARDFIX); _M.decompose(_p,_q,_s);
+      if(csnap){ station.position.copy(_p); station.quaternion.copy(_q); station.scale.copy(_s); csnap=false; }
+      else { station.position.lerp(_p,.35); station.quaternion.slerp(_q,.35); station.scale.lerp(_s,.35); } }
+    else if(chold && ori){ devQ(_qd); _dl.copy(_qd).invert().multiply(chold.qd);
+      station.position.copy(chold.p).applyQuaternion(_dl); station.quaternion.copy(_dl).multiply(chold.q); } }
+  function cardLock(){ station.visible=true; $('xscan').style.display='none'; state='placed'; steps(2); beep([784,1047]);
+    say('step 2 of 3 · card found','hold steady, your table is opening'); setTimeout(()=>$('xplace').onclick(),700); }
 
   function placeStation(pos){
     const dx=vp.x-pos.x, dz=vp.z-pos.z; station.position.copy(pos); station.rotation.y=Math.atan2(dx,dz); tableY=pos.y; station.visible=true;
@@ -1454,7 +1475,7 @@ async function startTable(aScene, look){
     riseCards(); await wait(1000); state='cards'; say('step 3 of 3 · explore',TXT.explore); showChips(true);
   }
   $('xback').onclick=closeScene;
-  const finish=()=>{ inXR=false; $('xchips').classList.remove('on'); if(look&&window.__lookTap){ window.__lookTap.forEach(([n,f])=>removeEventListener(n,f,true)); window.__lookTap=null; } renderer.setAnimationLoop(null); renderer.domElement.remove(); if(lookVid){ try{ camStream&&camStream.getTracks().forEach(t=>t.stop()); }catch(e){} lookVid.remove(); } if(look) removeEventListener('resize',onResize);
+  const finish=()=>{ inXR=false; if(track){ try{ aScene.systems['mindar-image-system'].stop(); }catch(e){} $('arwrap').innerHTML=''; } $('xchips').classList.remove('on'); if(look&&window.__lookTap){ window.__lookTap.forEach(([n,f])=>removeEventListener(n,f,true)); window.__lookTap=null; } renderer.setAnimationLoop(null); renderer.domElement.remove(); if(lookVid){ try{ camStream&&camStream.getTracks().forEach(t=>t.stop()); }catch(e){} lookVid.remove(); } if(look) removeEventListener('resize',onResize);
     $('xrui').classList.remove('on'); $('xback').classList.remove('on'); $('xplace').classList.remove('on'); $('xscan').style.display=''; loops.clear(); tweens=[]; show('intro'); };
   $('xexit').onclick=()=>{ if(session) session.end(); else finish(); };
 
@@ -1489,11 +1510,13 @@ async function startTable(aScene, look){
   const cp=V(0,0,0), hp=V(0,0,0);
   renderer.setAnimationLoop((t,frame)=>{
     const now=performance.now(), dt=Math.min(.1,(now-last)/1000); last=now; step(now);
-    if(look){ if(ori) devQ(cam.quaternion); vp.copy(cam.position); vq.copy(cam.quaternion); }
+    if(track) syncCard(); else if(look&&ori) devQ(cam.quaternion);
+    if(look){ vp.copy(cam.position); vq.copy(cam.quaternion); }
     if(frame||look){
       if(!look){ const pose=frame.getViewerPose(ref);
         if(pose){ const p=pose.transform.position, o=pose.transform.orientation; vp.set(p.x,p.y,p.z); vq.set(o.x,o.y,o.z,o.w); } }
-      if(state==='table'){ tT+=dt; let ok=false;
+      if(state==='table' && track){ if(seen && !csnap) cardLock(); }
+      else if(state==='table'){ tT+=dt; let ok=false;
         if(look){ const d=V(0,0,-1).applyQuaternion(vq); if(d.y<-.25){ const k=(TABLE-vp.y)/d.y; hp.copy(vp).addScaledVector(d,k); const hd=Math.hypot(hp.x-vp.x,hp.z-vp.z);
             if(hd>.3 && hd<1.4){ ok=true; lastHit=hp.clone(); ret.visible=true; ret.position.copy(hp); ret.rotation.y=Math.atan2(vp.x-hp.x,vp.z-hp.z); } } }
         else if(hts){ const hits=frame.getHitTestResults(hts);
@@ -1503,7 +1526,7 @@ async function startTable(aScene, look){
         say('step 1 of 3 · find a table', ok?'tap the screen to set your spot here':TXT.find);
         if(!ok && !look && tT>10 && vp.y>.6){ const f=V(0,0,-1).applyQuaternion(vq); f.y=0; f.normalize(); placeStation(V(vp.x+f.x*.55, vp.y-.5, vp.z+f.z*.55)); }
       }
-      if(state==='cards'){
+      if(state==='cards' && !track){
         xcards.forEach((c,i)=>{ const u=c.userData; c.getWorldPosition(cp); const dist=cp.distanceTo(vp);
           u.prog=Math.max(0,Math.min(1,u.prog+(dist<.14?dt/.5:-dt*1.5)));
           const th=Math.max(.0001,u.prog*Math.PI*2); if(Math.abs(u.th-th)>.05){ u.ring.geometry.dispose(); u.ring.geometry=new THREE.RingGeometry(.2,.215,64,1,Math.PI/2,-th); u.th=th; }
