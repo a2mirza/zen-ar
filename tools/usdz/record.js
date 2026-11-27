@@ -33,6 +33,14 @@ window.__bake = async (FPS=15) => {
     c.fillStyle='#322D3C'; c.font='700 128px '+Z.FONT; c.fillText('welcome to zen',74,290);
     c.fillStyle='#006D5A'; c.font='500 56px '+Z.FONT; c.fillText('the inner circle. here\'s what you get',78,400); });
   const sp=new T.Mesh(new T.PlaneGeometry(.36,.156),new T.MeshBasicMaterial({map:signTex,transparent:true,side:T.DoubleSide})); sign.add(sp);
+  // the opening sign that invites the tap, and a pulse that rolls out from the centre of the pond
+  const tap=new T.Group(); tap.name='tap_sign'; root.add(tap);
+  const tapTex=Z.tex(1200,470,(c,w,h)=>{ c.fillStyle='#FFFFFF'; c.beginPath(); c.roundRect(6,6,w-12,h-12,48); c.fill();
+    c.fillStyle='#00BD5F'; c.fillRect(80,92,34,34); c.fillStyle='#006D5A'; c.font='600 50px '+Z.FONT; c.fillText('welcome to zen',134,126);
+    c.fillStyle='#322D3C'; c.font='700 104px '+Z.FONT; c.fillText('tap to see what',74,262); c.fillText('you get',74,372);
+    c.strokeStyle='#00BD5F'; c.lineWidth=10; c.beginPath(); c.arc(w-170,330,62,0,7); c.stroke(); c.fillStyle='#00BD5F'; c.beginPath(); c.arc(w-170,330,26,0,7); c.fill(); });
+  const tapM=new T.Mesh(new T.PlaneGeometry(.36,.141),new T.MeshBasicMaterial({map:tapTex,transparent:true,side:T.DoubleSide})); tapM.name='tap_plate'; tap.add(tapM);
+  const pulse=new T.Group(); pulse.name='tap_pulse'; root.add(pulse); pulse.add(disc(.3,.306,null,'#00BD5F',0));
   // each perk: its scene grows out of the pond with a title above it
   const scenes=Z.INFO.map((d,i)=>{ const h=new T.Group(); h.name='scene_'+d.icon; h.position.y=.004; root.add(h); const b=d.build(false); b.g.scale.setScalar(TS); h.add(b.g); h.userData.L=b.L;
     const tt=Z.tex(1100,300,(c,w,hh)=>{ c.fillStyle='#FFFFFF'; c.beginPath(); c.roundRect(6,6,w-12,hh-12,40); c.fill(); c.fillStyle='#00BD5F'; c.fillRect(64,70,26,26);
@@ -41,10 +49,16 @@ window.__bake = async (FPS=15) => {
   // marquee bands and every texture with its own alpha are drawn solid, so text never looks washed out
   root.traverse(o=>{ if(o.material&&o.material.map&&o.material.transparent) o.material.userData.solid=true; });
 
-  // timeline (seconds)
-  const RIP=[0,1.6], CARD=[1.1,2.6], SIGN=[1.7,2.7], OUT=[6.2,7.2], S0=6.8, PER=7.4, GROW=1.9, FOLD=1.3;
+  // timeline (seconds). three clips that the tap behaviours in build_usdz.py play:
+  //   intro [0,INTRO]: the ripple spreads, the "tap to see what you get" sign rises
+  //   idle  [INTRO,W0]: calm loop that waits for a tap
+  //   welcome [W0,END]: card, welcome sign, the seven perks, then back to the idle pose (so idle can loop on after it)
+  // everything that moves on its own has a 3 s period and every clip boundary is a multiple of 3, so the joins are seamless.
+  const INTRO=3, W0=9, PULSE=3, wP=2*Math.PI/PULSE;
+  const RIP=[0,1.6], CARD=[W0+.5,W0+2], SIGN=[W0+1.1,W0+2.1], OUT=[W0+5.6,W0+6.6], S0=W0+6.2, PER=7.4, GROW=1.9, FOLD=1.3;
   const sStart=i=>S0+i*PER, LASTEND=sStart(N-1)+PER;
-  const BACK=[LASTEND-.6,LASTEND+.9], END=LASTEND+4.6, GONE=[END-1.6,END-.1];
+  const BACK=[LASTEND-.6,LASTEND+.9], END=Math.ceil((LASTEND+4.6)/PULSE)*PULSE, GONE=[END-2.4,END-.9];
+  const TAPOUT=[W0,W0+.7], TAPIN=[END-1.4,END-.05];
   const frames=Math.round(END*FPS);
   const cam=V(0,.45,.8);           // roughly where a viewer stands; signs turn to face it
   function sceneK(i,t){ const s=sStart(i); return eout(seg(t,s,s+GROW))*(1-ease(seg(t,s+PER-FOLD+.5,s+PER+.5))); }
@@ -57,8 +71,12 @@ window.__bake = async (FPS=15) => {
   const same=(a,b)=>a&&b&&a.every((x,j)=>Math.abs(x-b[j])<1e-5);
   const matMax=new Map();
   for(let f=0;f<=frames;f++){ VT=f/FPS; const t=VT;
-    const rip=eout(seg(t,RIP[0],RIP[1]))*(1-ease(seg(t,GONE[0],GONE[1])));
-    pondG.scale.setScalar(Math.max(1e-4,rip)); rings.forEach((g,k)=>{ const e=eout(seg(t,RIP[0]+k*.18,RIP[1]+k*.18))*(1-ease(seg(t,GONE[0]+k*.1,GONE[1]))); g.scale.setScalar(Math.max(1e-4,e*(1+.025*Math.sin(t*1.6-k*.9)))); });
+    const rip=eout(seg(t,RIP[0],RIP[1]));
+    pondG.scale.setScalar(Math.max(1e-4,rip)); rings.forEach((g,k)=>{ const e=eout(seg(t,RIP[0]+k*.18,RIP[1]+k*.18)); g.scale.setScalar(Math.max(1e-4,e*(1+.025*Math.sin(t*wP-k*.9)))); });
+    const tk=t<W0?eout(seg(t,1.2,2.4)):Math.max(1-ease(seg(t,TAPOUT[0],TAPOUT[1])),eout(seg(t,TAPIN[0],TAPIN[1])));
+    tap.scale.setScalar(Math.max(1e-4,tk)); tap.position.set(0,.16+.02*(1-tk)+Math.sin(t*wP)*.005,0); tap.lookAt(cam.x,tap.position.y,cam.z);
+    { const ph=((t%PULSE)+PULSE)%PULSE/PULSE, on=t>=INTRO&&(t<W0||t>=END-.001)?1:0; const r=.12+.88*eout(seg(ph,0,.85));
+      pulse.scale.set(Math.max(1e-4,r*on),1,Math.max(1e-4,r*on)); pulse.position.y=on?(ph<.06?-.004+.0074*seg(ph,0,.06):ph>.85?.0034-.0074*seg(ph,.85,.93):.0034):-.004; }
     // the card: rises at the start, sinks as the first scene opens, returns at the end and sinks again before the loop
     const cin=Math.max(eout(seg(t,CARD[0],CARD[1]))*(1-ease(seg(t,OUT[0],OUT[1]))), eout(seg(t,BACK[0],BACK[1]))*(1-ease(seg(t,GONE[0],GONE[1]-.3))));
     card.scale.setScalar(Math.max(1e-4,cin)); card.position.set(0,.004+Math.sin(t*1.2)*.004*cin,0); card.rotation.y=Math.sin(t*.55)*.45;
@@ -73,6 +91,7 @@ window.__bake = async (FPS=15) => {
       if(n.o.material){ const m=n.o.material; matMax.set(m,Math.max(matMax.get(m)||0,m.opacity)); } });
   }
   performance.now=realNow;
+  const tapIds=[pond,tapM,...rings.map(g=>g.children[0])].map(o=>idx.get(o));
 
   // geometry, materials, textures
   const geos=new Map(), mats=new Map(), texs=new Map(); const G=[], M=[], X={};
@@ -92,5 +111,5 @@ window.__bake = async (FPS=15) => {
       vcol:!!m.vertexColors,double:m.side===T.DoubleSide,additive:m.blending===T.AdditiveBlending}); return id; };
   const out=nodes.map((n,j)=>{ const o=n.o; const r={name:(o.name||o.type).replace(/[^A-Za-z0-9_]/g,'_').slice(0,40),parent:n.parent,s:n.samples};
     if(o.isMesh){ r.g=geoId(o.geometry); r.m=matId(o.material,o.geometry); if(o.material.vertexColors) r.vc=G[r.g].avg; } return r; });
-  return JSON.stringify({fps:FPS,frames,nodes:out,geos:G,mats:M,texs:X});
+  return JSON.stringify({fps:FPS,frames,clips:{intro:[0,INTRO],idle:[INTRO,W0],welcome:[W0,END]},tap:tapIds,nodes:out,geos:G,mats:M,texs:X});
 };

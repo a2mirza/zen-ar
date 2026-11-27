@@ -262,7 +262,7 @@ const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='M
 const QL=(()=>{ try{ return document.createElement('a').relList.supports('ar'); }catch(e){ return false; } })();
 if(IOS && QL){ window.IOS_QL=1; $('go').textContent='tap to enter zen'; $('goLive').style.display='block';
   document.querySelector('#intro h1').textContent='welcome to zen. see what you get.';
-  document.querySelector('#intro .list').innerHTML='<li><i>1</i>tap below and point your phone at a table</li><li><i>2</i>a ripple spreads and your zen card rises</li><li><i>3</i>watch each perk open up out of the ripple</li><li><i>4</i>pinch to resize, walk around it. it loops.</li>';
+  document.querySelector('#intro .list').innerHTML='<li><i>1</i>tap below and point your phone at a table</li><li><i>2</i>a ripple spreads across the table</li><li><i>3</i>tap the ripple: your zen card rises and each perk opens up</li><li><i>4</i>pinch to resize, walk around it. it loops.</li>';
   $('devnote').textContent='opens in your iphone\'s own ar view.';
   $('goLive').onclick=()=>liveGo(); }
 $('go').onclick = async () => { if(IOS && QL){ try{ actx=ZA.ctx()||actx; }catch(e){} $('qlA').click(); return; } return liveGo(); };

@@ -1,7 +1,10 @@
 """Turn tools/usdz/out/bake.json (from bake.js) into zen-welcome.usdz for AR Quick Look on iPhone.
 needs:  pip install usd-core
 usage:  python3 tools/usdz/build_usdz.py [out.usdz]
-Every animated node gets translate / orient / scale time samples; Quick Look auto-plays and loops them.
+Every animated node gets translate / orient / scale time samples. The bake holds three clips (intro, idle, welcome);
+Apple's preliminary behaviours (the schema Reality Composer exports) play them: on open, intro then idle on a loop; a tap
+on the ripple or the "tap to see what you get" sign plays the welcome, then idle loops again. Layout follows Needle
+Engine's proven Quick Look exporter: /zen/Scenes/Scene (sceneLibrary, plane anchoring) with a Behaviors scope.
 Materials are UsdPreviewSurface (PBR): base colour or texture, roughness, metallic, clearcoat, emissive, opacity."""
 import base64, io, json, os, shutil, sys
 from PIL import Image
@@ -16,7 +19,8 @@ usdc = os.path.join(work, 'zen_welcome.usdc')
 
 stage = Usd.Stage.CreateNew(usdc)
 UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y); UsdGeom.SetStageMetersPerUnit(stage, 1.0)
-stage.SetStartTimeCode(0); stage.SetEndTimeCode(d['frames']); stage.SetTimeCodesPerSecond(d['fps']); stage.SetFramesPerSecond(d['fps'])
+TPS = 60; TC = TPS / d['fps']        # 60 time codes per second, like Reality Composer / Needle, so action start/duration are plain seconds
+stage.SetStartTimeCode(0); stage.SetEndTimeCode(d['frames'] * TC); stage.SetTimeCodesPerSecond(TPS); stage.SetFramesPerSecond(TPS)
 
 # textures -> png files
 texfile = {}
@@ -124,12 +128,20 @@ def xform_ops(prim, samples):
         s = samples[0]; put(tr, Gf.Vec3d(*s[1:4])); put(ro, Gf.Quatf(s[7], s[4], s[5], s[6])); put(sc, Gf.Vec3f(*s[8:11]))
     else:
         for s in samples:
-            f = s[0]; put(tr, Gf.Vec3d(*s[1:4]), f); put(ro, Gf.Quatf(s[7], s[4], s[5], s[6]), f); put(sc, Gf.Vec3f(*s[8:11]), f)
+            f = s[0] * TC; put(tr, Gf.Vec3d(*s[1:4]), f); put(ro, Gf.Quatf(s[7], s[4], s[5], s[6]), f); put(sc, Gf.Vec3f(*s[8:11]), f)
 
 root = UsdGeom.Xform.Define(stage, '/zen'); stage.SetDefaultPrim(root.GetPrim())
-used = {}
+scenes = stage.DefinePrim('/zen/Scenes', 'Scope'); Usd.ModelAPI(scenes).SetKind('sceneLibrary')
+SC = '/zen/Scenes/Scene'
+scene = UsdGeom.Xform.Define(stage, SC).GetPrim()
+scene.SetMetadata('apiSchemas', Sdf.TokenListOp.CreateExplicit(['Preliminary_AnchoringAPI']))
+scene.SetCustomData({'preliminary_collidesWithEnvironment': False, 'sceneName': 'Scene'})
+def attr(prim, name, typ, val, uniform=False):
+    a = prim.CreateAttribute(name, typ, False, Sdf.VariabilityUniform if uniform else Sdf.VariabilityVarying); a.Set(val); return a
+attr(scene, 'preliminary:anchoring:type', Sdf.ValueTypeNames.Token, 'plane')
+attr(scene, 'preliminary:planeAnchoring:alignment', Sdf.ValueTypeNames.Token, 'horizontal')
 for j, n in enumerate(d['nodes']):
-    parent = '/zen' if n['parent'] < 0 else paths[n['parent']]
+    parent = SC if n['parent'] < 0 else paths[n['parent']]
     base = n['name'] or 'n'; nm = '%s_%d' % (base, j) if not base[0].isdigit() else 'n_%s_%d' % (base, j)
     path = parent + '/' + nm; paths.append(path)
     if 'g' in n:
@@ -141,7 +153,39 @@ for j, n in enumerate(d['nodes']):
         prim = UsdGeom.Xform.Define(stage, path).GetPrim()
     xform_ops(prim, n['s'])
 
+# behaviours: start -> intro, then idle forever; tap on the ripple / sign -> welcome, then idle forever
+anim_root = paths[0]; B = SC + '/Behaviors'; stage.DefinePrim(B, 'Scope')
+def rel(prim, name, targets): prim.CreateRelationship(name, False).SetTargets([Sdf.Path(t) for t in targets])
+def play(path, clip):
+    a = stage.DefinePrim(path, 'Preliminary_Action'); rel(a, 'affectedObjects', [anim_root])
+    attr(a, 'duration', Sdf.ValueTypeNames.Double, float(clip[1] - clip[0]))
+    attr(a, 'info:id', Sdf.ValueTypeNames.Token, 'StartAnimation')
+    attr(a, 'start', Sdf.ValueTypeNames.Double, float(clip[0]))
+    attr(a, 'animationSpeed', Sdf.ValueTypeNames.Double, 1.0)
+    attr(a, 'reversed', Sdf.ValueTypeNames.Bool, False); attr(a, 'reverses', Sdf.ValueTypeNames.Bool, False)
+    attr(a, 'multiplePerformOperation', Sdf.ValueTypeNames.Token, 'allow')
+    return path
+def group(path, kids, loop=False):
+    g = stage.DefinePrim(path, 'Preliminary_Action')
+    attr(g, 'info:id', Sdf.ValueTypeNames.Token, 'Group'); attr(g, 'loops', Sdf.ValueTypeNames.Bool, loop)
+    attr(g, 'performCount', Sdf.ValueTypeNames.Int, 0 if loop else 1); attr(g, 'type', Sdf.ValueTypeNames.Token, 'serial')
+    rel(g, 'actions', [k(path) for k in kids]); return path
+def behaviour(name, trig, action):
+    b = stage.DefinePrim(B + '/' + name, 'Preliminary_Behavior'); attr(b, 'exclusive', Sdf.ValueTypeNames.Bool, True, uniform=True)
+    tp = trig(b.GetPath().pathString); rel(b, 'triggers', [tp]); rel(b, 'actions', [action(b.GetPath().pathString + '/Seq')])
+def start_trig(bp):
+    t = stage.DefinePrim(bp + '/Start', 'Preliminary_Trigger'); attr(t, 'info:id', Sdf.ValueTypeNames.Token, 'SceneTransition'); attr(t, 'type', Sdf.ValueTypeNames.Token, 'enter'); return t.GetPath().pathString
+def tap_trig(bp):
+    t = stage.DefinePrim(bp + '/Tap', 'Preliminary_Trigger'); rel(t, 'affectedObjects', [paths[i] for i in d['tap']]); attr(t, 'info:id', Sdf.ValueTypeNames.Token, 'TapGesture'); return t.GetPath().pathString
+C = d['clips']
+idle = lambda p: group(p + '/IdleLoop', [lambda q: play(q + '/Idle', C['idle'])], loop=True)
+behaviour('OnOpen', start_trig, lambda p: group(p, [lambda q: play(q + '/Intro', C['intro']), lambda q: idle(q)]))
+behaviour('OnTap', tap_trig, lambda p: group(p, [lambda q: play(q + '/Welcome', C['welcome']), lambda q: idle(q)]))
 stage.GetRootLayer().Save()
+# sceneName is Reality Composer scene metadata pxr has no key for; write it through the text form, which keeps it
+lay = Sdf.Layer.FindOrOpen(usdc); txt = lay.ExportToString()
+k = '        def Xform "Scene" (\n'; assert txt.count(k) == 1
+txt = txt.replace(k, k + '            sceneName = "Scene"\n'); lay.ImportFromString(txt); lay.Save()
 if os.path.exists(dst): os.remove(dst)
 ok = UsdUtils.CreateNewARKitUsdzPackage(Sdf.AssetPath(usdc), dst)
 print('usdz', 'ok' if ok else 'FAILED', os.path.abspath(dst), '%.1f MB' % (os.path.getsize(dst) / 1e6))
