@@ -55,6 +55,16 @@ Archia font (fonts/), real zen logo (zen-logo.svg). Colours: digiteal #006D5A, g
 lush/mint #CEE9D8, dark #322D3C. Lowercase copy. Modern, clean, not "typical AI design"; subtle gradients, no noise,
 no ripple overlays on UI. Everything should feel high-end (premium materials even where contrast is needed).
 
+## iPhone AR Quick Look (default on iPhone since 2026-11-27)
+iPhone's main button opens `zen-welcome.usdz` in AR Quick Look (Apple's viewer anchors it to the table and loops it);
+"or try the interactive version" runs the card-tracking flow. The usdz is baked from the live scenes, not hand-made:
+`python3 -m http.server 8771` then `node tools/usdz/bake.js` (records tools/usdz/record.js timeline at 15 fps into
+out/bake.json) then `python3 tools/usdz/build_usdz.py` (needs `pip install usd-core pillow`; writes zen-welcome.usdz).
+`node tools/usdz/preview.js 5 8 12` renders frames from the bake to check it. Timeline: cards rise, gather to a shelf,
+each card glides to centre, drops in, doors retract, its scene grows with a turn; the next card glides in while the
+scene folds, then the cards return and sink (= first frame, seamless loop). Shaders, sprites, points (ripple, sky, motes,
+glow) are skipped; marquee texture scroll is lost but bands still turn. Rebake after any scene or card change.
+
 ## Phone testing
 GitHub Pages from `a2mirza/zen-ar` main: https://a2mirza.github.io/zen-ar/ (sim at /sim.html). Push to main = redeploy in ~1 min.
 

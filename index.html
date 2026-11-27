@@ -110,6 +110,8 @@ h1{font-weight:600;letter-spacing:-.5px;font-size:clamp(34px,10vw,44px);line-hei
   </ol>
   <p class="note" id="devnote">best in chrome on android, at a table. any card works for this preview.</p>
   <button class="primary" id="go">open my welcome</button>
+  <a id="qlA" rel="ar" href="zen-welcome.usdz#allowsContentScaling=1" style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0"><img alt="" width="1" height="1" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></a>
+  <button class="quiet" id="goLive" style="display:none;margin-top:10px;align-self:center;background:transparent;box-shadow:none;text-decoration:underline">or try the interactive version</button>
 </div></section>
 
 <section id="cap" class="screen">
@@ -254,7 +256,15 @@ addEventListener('click',e=>{ if(e.target.closest&&e.target.closest('button')) Z
 { const sb=document.getElementById('snd'); sb.classList.toggle('off',!ZA.on); sb.onclick=e=>{ e.stopPropagation(); ZA.setOn(!ZA.on); sb.classList.toggle('off',!ZA.on); if(ZA.on) ZA.startMusic(); }; }
 
 /* ---------------- step 1: snap any card ---------------- */
-$('go').onclick = async () => {
+/* iphone: apple's own ar viewer (ar quick look) pins the baked welcome animation (zen-welcome.usdz) to the table and plays it
+   on a loop. it is built by tools/usdz (bake.js -> build_usdz.py). the interactive card-tracking version stays one tap away. */
+const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const QL=(()=>{ try{ return document.createElement('a').relList.supports('ar'); }catch(e){ return false; } })();
+if(IOS && QL){ $('go').textContent='view your welcome in ar'; $('goLive').style.display='block';
+  $('devnote').textContent='point your phone at a table. your welcome plays right there. pinch to resize, it loops.';
+  $('goLive').onclick=()=>liveGo(); }
+$('go').onclick = async () => { if(IOS && QL){ try{ actx=ZA.ctx()||actx; }catch(e){} $('qlA').click(); return; } return liveGo(); };
+async function liveGo(){
   // iphone (no webxr) also starts by photographing the card: it becomes the tracking target that anchors the table
   try {
     try{ actx=ZA.ctx()||actx; actx&&actx.resume(); ZA.startMusic(); }catch(e){}
@@ -262,7 +272,7 @@ $('go').onclick = async () => {
     stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment', width:{ideal:1920}, height:{ideal:1080}, advanced:[{focusMode:'continuous'}]}, audio:false});
     $('camv').srcObject = stream; show('cap');
   } catch(e){ console.error('camera',e); fail(e && e.name==='NotAllowedError' ? 'camera blocked. allow camera access for this site and open it over https.' : 'couldn\'t open the camera ('+(e&&e.name||'error')+'). close other apps using it and try again.'); }
-};
+}
 function sharpness(v){ const c=document.createElement('canvas'); c.width=160; c.height=100; const x=c.getContext('2d',{willReadFrequently:true});
   x.drawImage(v,(v.videoWidth-v.videoWidth*.5)/2,(v.videoHeight-v.videoHeight*.5)/2,v.videoWidth*.5,v.videoHeight*.5,0,0,160,100);
   const d=x.getImageData(0,0,160,100).data; let sum=0,sq=0,n=0;
@@ -1062,7 +1072,7 @@ function addMarquee(r,d){ const g=grp(r.g), w=MARQ[d.icon]||[d.title];
   return r; }
 INFO.forEach(d=>{ const f=d.build; d.build=w=>{ const r=f(w); if(!w) addMarquee(r,d); return r; }; });
 
-window.__zz={person,P,box,studioEnv,emblem,acrylic,INFO,get PLANE(){ return PLANE; }};
+window.__zz={person,P,box,studioEnv,emblem,acrylic,INFO,tex,baseTex,holeTex,frameTex,signTex,roundedBox,FONT,LOGO,get PLANE(){ return PLANE; }};
 /* ---------------- step 3: the ar experience ---------------- */
 function startAR(ar, cardTable){
   $('arwrap').innerHTML = `
@@ -1543,7 +1553,7 @@ $('camBtn').onclick = () => { const v=$('arwrap').querySelector('video'); if(v){
 $('rescan').onclick = () => {
   const s=document.querySelector('a-scene'); try{ s && s.systems['mindar-image-system'].stop(); }catch(e){}
   tweens=[]; loops.clear(); $('arwrap').innerHTML=''; $('hud').classList.remove('on'); $('chipS').classList.add('off'); $('back').classList.remove('on');
-  $('hintS').classList.remove('off'); $('hint').textContent='point your camera at your card'; $('go').click();
+  $('hintS').classList.remove('off'); $('hint').textContent='point your camera at your card'; liveGo();
 };
 }
 
