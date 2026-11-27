@@ -15,7 +15,7 @@ The on-card build (v2) is abandoned; only this repo is maintained. State as of 2
    (check with `gh api repos/a2mirza/zen-ar/actions/runs`). Camera AR needs https, so always test phones on this link.
 4. Working loop the user likes: they text a change, Claude edits, syntax-checks, checks in the sim/preview, pushes to
    main, and tells them to reload the link on their phone.
-5. Tooling: Node + `playwright` (or puppeteer) for previews/bake; Python 3 with `pip install usd-core pillow` for the
+5. Tooling: Node + `playwright` (or puppeteer) for previews/bake; Python 3 with `pip install usd-core pillow` (plus numpy for plane_convert.py) for the
    USDZ build.
 
 ## The 7 perks (`INFO` in index.html, order = belt order)
