@@ -2,7 +2,7 @@
 
 WebAR prototype for **zen by easypaisa digital bank** (premium banking). A customer unboxes their zen card, scans a QR
 in the box, and gets a fun welcome: "access granted · welcome to zen, the inner circle". A platform opens on the table
-beside the card like a trap door over a rippling pond, seven acrylic info cards rise on a swipeable conveyor belt across the platform (cashback & rewards / higher transfer limits /
+beside the card like a trap door over a rippling pond, seven acrylic info cards rise on a swipeable conveyor belt across the platform (until the first swipe it teases toward the next cards; dots, "n of 7" and an animated "swipe for more" sit in the sheet) (cashback & rewards / higher transfer limits /
 international payments / priority helpline in a back row; exclusive events / airport lounges / coffee & discounts up to 50% off in front), and tapping one raises a miniature diorama. It is a standalone welcome moment, not connected to any
 account, and must never read like card verification or registration.
 

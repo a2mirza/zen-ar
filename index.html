@@ -87,7 +87,13 @@ h1{font-weight:600;letter-spacing:-.5px;font-size:clamp(34px,10vw,44px);line-hei
 @keyframes pulse2{0%{transform:scale(.25);opacity:0}15%{opacity:1}100%{transform:scale(1);opacity:0}}
 @media (prefers-reduced-motion:reduce){.scanning i{animation:none;opacity:.6}}
 .chips{display:none;gap:8px;overflow-x:auto;margin:12px -18px -4px;padding:0 18px 4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.chips.on{display:flex}.chips::-webkit-scrollbar{display:none}
+.chips.on{display:flex}
+.belt{display:none;align-items:center;gap:10px;margin-top:12px}.belt.on{display:flex}
+.belt .dots{display:flex;gap:5px;align-items:center}.belt .dots i{display:block;width:6px;height:6px;border-radius:3px;background:rgba(0,109,90,.22);transition:width .35s,background .35s}.belt .dots i.on{width:20px;background:var(--green)}
+.belt .n{font-size:13px;color:var(--teal);font-variant-numeric:tabular-nums;white-space:nowrap}
+.belt .sw{margin-left:auto;display:flex;align-items:center;gap:2px;font-size:13px;font-weight:600;color:var(--teal);white-space:nowrap;transition:opacity .6s}.belt .sw.off{opacity:0}
+.belt .sw b{display:inline-block;animation:nudge 1.4s ease-in-out infinite}.belt .sw b+b{animation-delay:.15s;opacity:.55}
+@keyframes nudge{0%,100%{transform:translateX(0)}50%{transform:translateX(5px)}}.chips::-webkit-scrollbar{display:none}
 .chip{flex:none;appearance:none;border:1px solid var(--line);background:#EEF8F2;color:var(--teal);border-radius:20px;min-height:40px;padding:0 14px;font-size:14px;font-weight:500;white-space:nowrap}
 .chip:active{background:var(--lush)}
 .a-enter-vr,.a-enter-ar,.a-enter-vr-button,.a-enter-ar-button,.a-orientation-modal{display:none!important}
@@ -145,6 +151,7 @@ h1{font-weight:600;letter-spacing:-.5px;font-size:clamp(34px,10vw,44px);line-hei
   <div class="top"><div class="steps3" id="xsteps"><i class="on"></i><i></i><i></i></div><span class="sp"></span><button class="quiet" id="xback">← cards</button><button class="quiet" id="xexit">exit</button></div>
   <div class="sheet"><b id="xlabel">step 1 of 3</b><div class="t" id="xhint">point your phone at a table and move it slowly</div>
     <button class="primary" id="xplace">my card is in place</button>
+    <div class="belt" id="xbelt"><div class="dots" id="xdots"></div><span class="n" id="xcount">1 of 7</span><span class="sw" id="xswipe">swipe for more <b>›</b><b>›</b></span></div>
     <div class="chips" id="xchips"></div></div>
 </div>
 
@@ -1434,12 +1441,19 @@ async function startTable(aScene, look){
   const snapTo=i=>{ bt=Math.min(INFO.length-1,Math.max(0,i)); };
   function riseCards(){ sky.userData.set(.3); xcards.forEach((c,i)=>{ const q=beltPose(i,bo); c.userData.rest.copy(q.p); c.visible=q.op>.01; c.position.set(q.p.x,.02,q.p.z); c.rotation.set(-.12,q.ry,0); c.scale.setScalar(.01); setOp(c,0); c.userData.prog=0;
     to(c,{pos:q.p,scale:V(q.s,q.s,q.s),op:q.op},900,{delay:Math.abs(i-bo)*120,e:E.back}); }); }
+  /* make the belt read as scrollable: until the first swipe it nudges toward the next cards and settles back every few
+     seconds (a "there's more" tease), and the sheet shows dots, an "n of 7" count and an animated "swipe for more" */
+  let swiped=false, teaseT=-1, lastC=-1;
+  const dotsEl=$('xdots'); dotsEl.innerHTML=INFO.map(()=>'<i></i>').join('');
+  const beltUI=v=>{ $('xbelt').classList.toggle('on',v); if(v){ $('xswipe').classList.toggle('off',swiped); lastC=-1; teaseT=swiped?-1:performance.now()+900; } };
   loops.add(t=>{ const n=performance.now(), dt=Math.min(.1,(n-blast)/1000); blast=n; if(state!=='cards') return;
     if(!bdrag) bo+=(bt-bo)*Math.min(1,dt*7); else bo=Math.min(INFO.length-.6,Math.max(-.4,bo));
-    xcards.forEach((c,i)=>{ const q=beltPose(i,bo); c.position.set(q.p.x,q.p.y+Math.sin(t*1.3+i*1.2)*.004,q.p.z); c.rotation.set(-.12,q.ry,0); c.scale.setScalar(Math.max(.001,q.s));
+    let tz=0; if(!swiped && !bdrag && teaseT>0 && n>teaseT){ const k=((n-teaseT)/1000)%4.5; if(k<1.6) tz=Math.sin(Math.PI*k/1.6)**2*.55*(bt>INFO.length-2?-1:1); }
+    const c0=centre(); if(c0!==lastC){ lastC=c0; [...dotsEl.children].forEach((d,i)=>d.classList.toggle('on',i===c0)); $('xcount').textContent=(c0+1)+' of '+INFO.length; }
+    xcards.forEach((c,i)=>{ const q=beltPose(i,bo+tz); c.position.set(q.p.x,q.p.y+Math.sin(t*1.3+i*1.2)*.004,q.p.z); c.rotation.set(-.12,q.ry,0); c.scale.setScalar(Math.max(.001,q.s));
       if(Math.abs((c.userData.op??1)-q.op)>.01) setOp(c,q.op); c.visible=q.op>.01; }); });
   // a swipe ends: carry the flick a little, then snap to the nearest card
-  const endDrag=v=>{ bdrag=null; snapTo(Math.round(bo+Math.max(-2,Math.min(2,v*.25)))); };
+  const endDrag=v=>{ bdrag=null; if(!swiped){ swiped=true; $('xswipe').classList.add('off'); } snapTo(Math.round(bo+Math.max(-2,Math.min(2,v*.25)))); };
   // a tap on a card: the centre one opens, a side one slides to the centre
   const tapCard=i=>{ if(i===centre() && Math.abs(bo-i)<.3) openScene(i); else snapTo(i); };
 
@@ -1450,7 +1464,7 @@ async function startTable(aScene, look){
 
   let state='table', lastHit=null, tT=0, last=performance.now(), current=null;
   const vp=V(0,0,0), vq=new THREE.Quaternion();
-  const TXT={ find:track?'lay your card flat on the table, top edge away from you, and point your phone at it':look?'point your phone down at your table':'point your phone at a table and move it slowly', explore:'swipe the cards, tap the middle one to open it', around:look?'turn your phone to look around it':'walk around the table to look closer' };
+  const TXT={ find:track?'lay your card flat on the table, top edge away from you, and point your phone at it':look?'point your phone down at your table':'point your phone at a table and move it slowly', explore:'swipe sideways for all 7 perks, tap the middle one to open it', around:look?'turn your phone to look around it':'walk around the table to look closer' };
   steps(1); say(track?'step 1 of 3 · find your card':'step 1 of 3 · find a table',TXT.find);
 
   // ---- card anchoring (iphone): station pose follows the tracked card; when the card drops out of view the motion sensor holds it ----
@@ -1541,7 +1555,7 @@ async function startTable(aScene, look){
     window.__lookTap.forEach(([n,f])=>addEventListener(n,f,true)); }
   // a row of perk chips under the hint, so every perk can always be opened with a normal tap
   const chips=$('xchips'); chips.innerHTML=''; INFO.forEach((d,i)=>{ const b=document.createElement('button'); b.className='chip'; b.textContent=d.title; b.onclick=e=>{ e.stopPropagation(); openScene(i); }; chips.appendChild(b); });
-  const showChips=v=>chips.classList.toggle('on',v);
+  const showChips=v=>{ chips.classList.toggle('on',v); beltUI(v); };
 
   const cp=V(0,0,0), hp=V(0,0,0);
   renderer.setAnimationLoop((t,frame)=>{
