@@ -86,6 +86,10 @@ h1{font-weight:600;letter-spacing:-.5px;font-size:clamp(34px,10vw,44px);line-hei
 .scanning b{position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;background:#00BD5F;box-shadow:0 0 0 4px rgba(255,255,255,.85)}
 @keyframes pulse2{0%{transform:scale(.25);opacity:0}15%{opacity:1}100%{transform:scale(1);opacity:0}}
 @media (prefers-reduced-motion:reduce){.scanning i{animation:none;opacity:.6}}
+.chips{display:none;gap:8px;overflow-x:auto;margin:12px -18px -4px;padding:0 18px 4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.chips.on{display:flex}.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;appearance:none;border:1px solid var(--line);background:#EEF8F2;color:var(--teal);border-radius:20px;min-height:40px;padding:0 14px;font-size:14px;font-weight:500;white-space:nowrap}
+.chip:active{background:var(--lush)}
 #snd{position:fixed;left:14px;bottom:calc(63px + env(safe-area-inset-bottom));z-index:60;width:46px;height:46px;border-radius:23px;border:0;background:rgba(255,255,255,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:grid;place-items:center;box-shadow:0 6px 20px rgba(20,40,30,.14);padding:0}
 #snd{display:none} body:has(#hud.on) #snd,body:has(#xrui.on) #snd{display:grid}
 #snd svg{width:22px;height:22px} #snd .x{display:none} #snd.off .w{display:none} #snd.off .x{display:block}
@@ -137,7 +141,8 @@ h1{font-weight:600;letter-spacing:-.5px;font-size:clamp(34px,10vw,44px);line-hei
   <div class="scanning" id="xscan"><i></i><i></i><b></b></div>
   <div class="top"><div class="steps3" id="xsteps"><i class="on"></i><i></i><i></i></div><span class="sp"></span><button class="quiet" id="xback">← cards</button><button class="quiet" id="xexit">exit</button></div>
   <div class="sheet"><b id="xlabel">step 1 of 3</b><div class="t" id="xhint">point your phone at a table and move it slowly</div>
-    <button class="primary" id="xplace">my card is in place</button></div>
+    <button class="primary" id="xplace">my card is in place</button>
+    <div class="chips" id="xchips"></div></div>
 </div>
 
 <script>
@@ -1415,7 +1420,7 @@ async function startTable(aScene, look){
 
   let state='table', lastHit=null, tT=0, last=performance.now(), current=null;
   const vp=V(0,0,0), vq=new THREE.Quaternion();
-  const TXT={ find:look?'point your phone down at your table':'point your phone at a table and move it slowly', explore:look?'tap a card to open it':'tap a card, or touch your phone to it', around:look?'turn your phone to look around it':'walk around the table to look closer' };
+  const TXT={ find:look?'point your phone down at your table':'point your phone at a table and move it slowly', explore:look?'tap a card, or pick a perk below':'tap a card, or touch your phone to it', around:look?'turn your phone to look around it':'walk around the table to look closer' };
   steps(1); say('step 1 of 3 · find a table',TXT.find);
 
   function placeStation(pos){
@@ -1431,11 +1436,11 @@ async function startTable(aScene, look){
     traceCard.forEach(r=>draw(r,700)); traceLink.forEach(r=>draw(r,500,650)); tracePlat.forEach(r=>draw(r,1000,1100));
     xtrap.g.visible=true; setOp(xtrap.doorsG,0); to(xtrap.doorsG,{op:1},700,{delay:1900});
     await wait(2500); riseCards(); await wait(1000);
-    state='cards'; steps(3); say('step 3 of 3 · explore',TXT.explore);
+    state='cards'; steps(3); say('step 3 of 3 · explore',TXT.explore); showChips(true);
   };
 
   async function openScene(i){
-    if(state!=='cards') return; state='busy'; const d=INFO[i]; ZA.chime([72,79],.08,.1); ZA.whoosh(1.2,.07); if(navigator.vibrate) navigator.vibrate([30,30,60]);
+    if(state!=='cards') return; state='busy'; showChips(false); const d=INFO[i]; ZA.chime([72,79],.08,.1); ZA.whoosh(1.2,.07); if(navigator.vibrate) navigator.vibrate([30,30,60]);
     xcards.forEach(c=>to(c,{scale:V(.01,.01,.01),pos:V(c.userData.rest.x,.02,PC),op:0},550,{e:E.inOut}));
     await wait(500); xcards.forEach(c=>c.visible=false);
     const b=d.build(false); dioG.add(b.g); b.L.forEach(f=>loops.add(f)); current=b; sky.userData.set(1);
@@ -1446,10 +1451,10 @@ async function startTable(aScene, look){
     if(state!=='scene') return; state='busy'; ZA.sceneStop(); ZA.whoosh(1.4,.05,false); $('xback').classList.remove('on');
     await xtrap.sink(900); await xtrap.close(700);
     current.L.forEach(f=>loops.delete(f)); dioG.remove(current.g); current=null;
-    riseCards(); await wait(1000); state='cards'; say('step 3 of 3 · explore',TXT.explore);
+    riseCards(); await wait(1000); state='cards'; say('step 3 of 3 · explore',TXT.explore); showChips(true);
   }
   $('xback').onclick=closeScene;
-  const finish=()=>{ inXR=false; renderer.setAnimationLoop(null); renderer.domElement.remove(); if(lookVid){ try{ camStream&&camStream.getTracks().forEach(t=>t.stop()); }catch(e){} lookVid.remove(); } if(look) removeEventListener('resize',onResize);
+  const finish=()=>{ inXR=false; $('xchips').classList.remove('on'); if(look&&window.__lookTap){ window.__lookTap.forEach(([n,f])=>removeEventListener(n,f,true)); window.__lookTap=null; } renderer.setAnimationLoop(null); renderer.domElement.remove(); if(lookVid){ try{ camStream&&camStream.getTracks().forEach(t=>t.stop()); }catch(e){} lookVid.remove(); } if(look) removeEventListener('resize',onResize);
     $('xrui').classList.remove('on'); $('xback').classList.remove('on'); $('xplace').classList.remove('on'); $('xscan').style.display=''; loops.clear(); tweens=[]; show('intro'); };
   $('xexit').onclick=()=>{ if(session) session.end(); else finish(); };
 
@@ -1463,10 +1468,23 @@ async function startTable(aScene, look){
       if(state==='table' && lastHit){ placeStation(lastHit.clone()); return; }
       if(state!=='cards') return; rm.identity().extractRotation(ctrl.matrixWorld);
       ray.ray.origin.setFromMatrixPosition(ctrl.matrixWorld); ray.ray.direction.set(0,0,-1).applyMatrix4(rm); pick(); }); }
-  else renderer.domElement.addEventListener('click',e=>{
+  else { // iphone: taps come through pointer events on the whole window (safari can drop canvas clicks), with a forgiving hit area
+    let pd=null;
+    const onTap=(x,y)=>{
       if(lookVid && lookVid.paused) lookVid.play().catch(()=>{});
       if(state==='table' && lastHit){ placeStation(lastHit.clone()); return; }
-      if(state!=='cards') return; ray.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1),cam); pick(); });
+      if(state!=='cards') return; ray.setFromCamera(new THREE.Vector2(x/innerWidth*2-1,-(y/innerHeight)*2+1),cam);
+      const hit=ray.intersectObjects(xcards.map(c=>c.userData.m),false)[0]; if(hit){ openScene(hit.object.userData.i); return; }
+      let best=-1, bd=Math.min(innerWidth,innerHeight)*.12; xcards.forEach((c,i)=>{ const v=c.getWorldPosition(V(0,0,0)).project(cam); if(v.z>1) return;
+        const d=Math.hypot((v.x+1)/2*innerWidth-x,(1-v.y)/2*innerHeight-y); if(d<bd){ bd=d; best=i; } }); if(best>=0) openScene(best); };
+    if(window.__lookTap) window.__lookTap.forEach(([n,f])=>removeEventListener(n,f,true));   // drop the previous run's listeners after a restart
+    window.__lookTap=[['pointerdown',e=>{ pd=(e.target.closest&&e.target.closest('button'))?null:{x:e.clientX,y:e.clientY,t:performance.now()}; }],
+      ['pointerup',e=>{ if(!pd||!$('xrui').classList.contains('on')) return; const ok=Math.hypot(e.clientX-pd.x,e.clientY-pd.y)<24&&performance.now()-pd.t<800; pd=null; if(ok) onTap(e.clientX,e.clientY); }],
+      ['pointercancel',()=>{ pd=null; }]];
+    window.__lookTap.forEach(([n,f])=>addEventListener(n,f,true)); }
+  // a row of perk chips under the hint, so every perk can always be opened with a normal tap
+  const chips=$('xchips'); chips.innerHTML=''; INFO.forEach((d,i)=>{ const b=document.createElement('button'); b.className='chip'; b.textContent=d.title; b.onclick=e=>{ e.stopPropagation(); openScene(i); }; chips.appendChild(b); });
+  const showChips=v=>chips.classList.toggle('on',v);
 
   const cp=V(0,0,0), hp=V(0,0,0);
   renderer.setAnimationLoop((t,frame)=>{
