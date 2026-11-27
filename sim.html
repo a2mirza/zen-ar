@@ -71,7 +71,7 @@ kbd{font:13px Archia,sans-serif;border:1px solid var(--edge);border-radius:6px;p
           <button id="ahead">look ahead</button>
         </div>
       </div>
-      <p class="note">Or drag inside the phone, or use the <kbd>arrow</kbd> keys.</p>
+      <p class="note">Or drag inside the phone, or use the <kbd>arrow</kbd> keys. While the perk cards are up, dragging swipes the card belt instead.</p>
     </div>
     <div class="card">
       <h2>Jump around</h2>
@@ -133,7 +133,8 @@ function hook(){
   md.getUserMedia=async()=>cam.stream();                     // the sandbox has no camera: hand the app the painted room (a fresh stream each time)
   try{ Object.defineProperty(W.navigator,'xr',{value:undefined,configurable:true}); }catch(e){}
   let down=null, moved=false;
-  D.addEventListener('pointerdown',e=>{ down={x:e.clientX,y:e.clientY}; moved=false; },true);
+  // drag tilts the phone, except while the perk cards are up: then a sideways drag swipes the card belt in the app
+  D.addEventListener('pointerdown',e=>{ let st=null; try{ st=W.__xr2&&W.__xr2.state(); }catch(_){} down=st==='cards'?null:{x:e.clientX,y:e.clientY}; moved=false; },true);
   D.addEventListener('pointermove',e=>{ if(!down||!e.buttons) return; const dx=e.clientX-down.x, dy=e.clientY-down.y;
     if(!moved&&Math.hypot(dx,dy)<8) return; moved=true; O.a+=dx*.25; O.b+=dy*.2; clampO(); down={x:e.clientX,y:e.clientY}; },true);
   D.addEventListener('pointerup',()=>{ down=null; },true);
