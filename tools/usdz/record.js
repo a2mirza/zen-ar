@@ -1,9 +1,10 @@
 // Bakes the zen welcome into one continuous animation and returns it as JSON (run inside index.html, see bake.js).
-// Timeline: platform glows, seven cards rise, they gather into a shelf at the back, then each perk card in turn glides
-// to the centre, drops into the platform, the doors open and its scene grows out; as the scene folds away the next card
-// is already gliding in, so every scene flows into the next. At the end the cards return to the opening layout and sink,
+// Timeline: a ripple spreads across the table, the zen card rises upright out of it under a "welcome to zen" sign, then the
+// card sinks back in and the perk scenes open out of the ripple one after another, each with its title above, each one
+// folding away as the next grows. At the end the card and welcome return, then everything sinks back into the table,
 // which matches the first frame, so the loop is seamless.
 window.__bake = async (FPS=15) => {
+  window.__texScale=2;   // draw every canvas texture at twice the size, for crisp text
   const Z=window.__zz, T=THREE; let VT=0; const realNow=performance.now.bind(performance);
   performance.now=()=>VT*1000;                       // virtual clock: marquees and anything else timed read this
   const V=(x,y,z)=>new T.Vector3(x,y,z);
@@ -11,50 +12,42 @@ window.__bake = async (FPS=15) => {
   const seg=(t,a,b)=>Math.min(1,Math.max(0,(t-a)/(b-a)));
   const lerp=(a,b,k)=>a+(b-a)*k, lv=(a,b,k)=>V(lerp(a.x,b.x,k),lerp(a.y,b.y,k),lerp(a.z,b.z,k));
   while(!Z.PLANE) await new Promise(r=>setTimeout(r,100));
+  { const probe=Z.zenCard(new T.Group(),0,0,0,.1); const mp=probe.children[1].material.map; for(let k=0;k<100&&!(mp.image&&mp.image.complete&&mp.image.naturalWidth);k++) await new Promise(r=>setTimeout(r,100)); }
 
   const root=new T.Group(); root.name='zen_welcome';
-  const TS=.62, AR=.63, P=Z.P;
-  // platform: lacquered slab, a still pond face, a soft glowing rim, two doors that retract to their outer edges
-  const plat=new T.Group(); plat.name='platform'; root.add(plat);
-  Z.box(plat,TS+.02,.02,TS*AR+.02,P.teal,0,.01,0);
-  const flatM=(w,h,map,y,o={})=>{ const m=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial(Object.assign({map,transparent:true},o))); m.rotation.x=-Math.PI/2; m.position.y=y; return m; };
-  plat.add(flatM(TS*.98,TS*AR*.98,Z.holeTex(AR),.0262));
-  const rim=flatM(TS*1.08,TS*AR*1.1,Z.frameTex(AR),.0266); plat.add(rim);
-  const doors=[-1,1].map(s=>{ const piv=new T.Group(); piv.name='door'+(s<0?'L':'R'); piv.position.set(s*TS*.49,.0272,0); plat.add(piv);
-    const m=flatM(TS*.49,TS*AR*.98,Z.baseTex(AR),0); m.position.x=-s*TS*.245; piv.add(m); return piv; });
-  // the scenes, each in a holder that grows out of the platform centre
-  const scenes=Z.INFO.map((d,i)=>{ const h=new T.Group(); h.name='scene_'+d.icon; h.position.y=.027; root.add(h); const b=d.build(false); b.g.scale.setScalar(TS); h.add(b.g); h.userData.L=b.L; return h; });
-  // the cards
-  const CSX=.32;
-  const cards=Z.INFO.map((d,i)=>{ const h=new T.Group(); h.name='card_'+d.icon; root.add(h); h.add(Z.acrylic(d)); return h; });
-  const N=cards.length, PC=0;
-  const big=i=>{ const back=i<4, k=back?i-1.5:i-5; return {p:V(k*.15,back?.215:.095,PC+(back?-.07:.05)),s:CSX,rx:-.12}; };
-  const shelf=i=>({p:V((i-(N-1)/2)*.086,.27,-.26),s:.18,rx:-.1});
-  const hero={p:V(0,.24,.03),s:.46,rx:-.1}, sunk={p:V(0,.03,0),s:.03,rx:-Math.PI/2};
-  const lerpPose=(a,b,k)=>({p:lv(a.p,b.p,k),s:lerp(a.s,b.s,k),rx:lerp(a.rx,b.rx,k)});
+  const TS=.62, P=Z.P, N=Z.INFO.length;
+  const disc=(r0,r1,map,col,y)=>{ const m=new T.Mesh(new T.RingGeometry(r0,r1,128,1),new T.MeshBasicMaterial(map?{map,transparent:true}:{color:col})); m.rotation.x=-Math.PI/2; m.position.y=y; return m; };
+  // the pond: a calm mint disc with soft concentric ripples, the same motif as the card's face
+  const pondTex=Z.tex(1024,1024,(c,w,h)=>{ const g=c.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2); g.addColorStop(0,'#F2FBF6'); g.addColorStop(.55,'#D6EEE0'); g.addColorStop(.92,'#B9DDC8'); g.addColorStop(1,'rgba(185,221,200,0)');
+    c.fillStyle=g; c.beginPath(); c.arc(w/2,h/2,w/2,0,7); c.fill();
+    for(let k=0;k<14;k++){ const r=w*(.08+k*.03); c.strokeStyle='rgba(255,255,255,'+(.55-k*.03)+')'; c.lineWidth=5; c.beginPath(); c.arc(w/2,h/2,r,0,7); c.stroke();
+      c.strokeStyle='rgba(60,120,95,'+(.12-k*.006)+')'; c.lineWidth=3; c.beginPath(); c.arc(w/2,h/2+3,r+4,0,7); c.stroke(); } });
+  const pondG=new T.Group(); pondG.name='pond'; root.add(pondG);
+  const pond=new T.Mesh(new T.CircleGeometry(.38,128),new T.MeshBasicMaterial({map:pondTex,transparent:true})); pond.rotation.x=-Math.PI/2; pond.position.y=.002; pondG.add(pond);
+  const rings=[.39,.43,.475,.52].map((r,k)=>{ const g=new T.Group(); g.name='ripple'+k; root.add(g); g.add(disc(r,r+.005,null,k%2?'#00BD5F':'#FFFFFF',.003)); return g; });
+  // the zen card, upright, rising out of the pond, and the welcome sign above it
+  const card=new T.Group(); card.name='zen_card'; root.add(card); const zc=Z.zenCard(card,0,0,0,.11); zc.position.y=.11*1.585/2;
+  const sign=new T.Group(); sign.name='welcome'; root.add(sign);
+  const signTex=Z.tex(1200,520,(c,w,h)=>{ c.fillStyle='#FFFFFF'; c.beginPath(); c.roundRect(6,6,w-12,h-12,48); c.fill();
+    c.fillStyle='#00BD5F'; c.fillRect(80,96,34,34); c.fillStyle='#006D5A'; c.font='600 44px '+Z.FONT; c.fillText('access granted',134,128);
+    c.fillStyle='#322D3C'; c.font='700 128px '+Z.FONT; c.fillText('welcome to zen',74,290);
+    c.fillStyle='#006D5A'; c.font='500 56px '+Z.FONT; c.fillText('the inner circle. here\'s what you get',78,400); });
+  const sp=new T.Mesh(new T.PlaneGeometry(.36,.156),new T.MeshBasicMaterial({map:signTex,transparent:true,side:T.DoubleSide})); sign.add(sp);
+  // each perk: its scene grows out of the pond with a title above it
+  const scenes=Z.INFO.map((d,i)=>{ const h=new T.Group(); h.name='scene_'+d.icon; h.position.y=.004; root.add(h); const b=d.build(false); b.g.scale.setScalar(TS); h.add(b.g); h.userData.L=b.L;
+    const tt=Z.tex(1100,300,(c,w,hh)=>{ c.fillStyle='#FFFFFF'; c.beginPath(); c.roundRect(6,6,w-12,hh-12,40); c.fill(); c.fillStyle='#00BD5F'; c.fillRect(64,70,26,26);
+      c.fillStyle='#006D5A'; c.font='600 36px '+Z.FONT; c.fillText('perk 0'+(i+1)+' of 0'+N,104,96); c.fillStyle='#322D3C'; c.font='700 96px '+Z.FONT; c.fillText(d.title,60,212); });
+    const lab=new T.Group(); lab.name='title_'+d.icon; root.add(lab); lab.add(new T.Mesh(new T.PlaneGeometry(.33,.09),new T.MeshBasicMaterial({map:tt,transparent:true,side:T.DoubleSide}))); h.userData.lab=lab; return h; });
+  // marquee bands and every texture with its own alpha are drawn solid, so text never looks washed out
+  root.traverse(o=>{ if(o.material&&o.material.map&&o.material.transparent) o.material.userData.solid=true; });
 
   // timeline (seconds)
-  const INTRO=2.6, GATHER=[INTRO+2.2,INTRO+3.6], S0=GATHER[1]+.6, PER=8.6;
-  const sStart=i=>S0+i*PER;
-  const LAST=sStart(N-1)+PER, RET=[LAST,LAST+2.2], END=LAST+4.6;
+  const RIP=[0,1.6], CARD=[1.1,2.6], SIGN=[1.7,2.7], OUT=[6.2,7.2], S0=6.8, PER=7.4, GROW=1.9, FOLD=1.3;
+  const sStart=i=>S0+i*PER, LASTEND=sStart(N-1)+PER;
+  const BACK=[LASTEND-.6,LASTEND+.9], END=LASTEND+4.6, GONE=[END-1.6,END-.1];
   const frames=Math.round(END*FPS);
-
-  function pose(i,t){
-    if(t<INTRO+1.2){ const k=back(seg(t,.5+i*.16,1.4+i*.16)); const b=big(i); return {p:lv(V(b.p.x,.03,b.p.z),b.p,k),s:Math.max(.0001,b.s*k),rx:b.rx}; }
-    if(t<GATHER[1]) return lerpPose(big(i),shelf(i),ease(seg(t,GATHER[0]+i*.06,GATHER[1]-.36+i*.06)));
-    if(t>=RET[0]){ const b=big(i); const r=lerpPose(shelf(i),b,ease(seg(t,RET[0]+i*.07,RET[1]+i*.07)));
-      const k=ease(seg(t,END-1.3,END-.2)); return {p:lv(r.p,V(b.p.x,.03,b.p.z),k),s:Math.max(.0001,r.s*(1-k)),rx:r.rx}; }
-    const s=sStart(i);
-    if(t<s-1.3) return shelf(i);                                                     // waiting on the shelf
-    if(t<s) return lerpPose(shelf(i),hero,ease(seg(t,s-1.3,s)));                     // glides to the centre
-    if(t<s+.9) return lerpPose(hero,sunk,ease(seg(t,s,s+.9)));                       // lays down and drops into the platform
-    if(t<s+PER-2.2) return {p:sunk.p,s:.0001,rx:0};                                  // its scene is playing
-    const k=eout(seg(t,s+PER-2.2,s+PER-1)); const sh=shelf(i); return {p:sh.p,s:Math.max(.0001,sh.s*k),rx:sh.rx};   // reappears on the shelf
-  }
-  function sceneScale(i,t){ const s=sStart(i);
-    const up=eout(seg(t,s+.6,s+2.6)), down=ease(seg(t,s+PER-1.1,s+PER-.1)); return Math.max(.0001,up*(1-down)); }
-  function doorOpen(t){ let o=0; for(let i=0;i<N;i++){ const s=sStart(i); o=Math.max(o,ease(seg(t,s+.45,s+1.3))*(1-ease(seg(t,s+PER-.6,s+PER+.15)))); } return o; }
-
+  const cam=V(0,.45,.8);           // roughly where a viewer stands; signs turn to face it
+  function sceneK(i,t){ const s=sStart(i); return eout(seg(t,s,s+GROW))*(1-ease(seg(t,s+PER-FOLD+.5,s+PER+.5))); }
   // collect nodes
   const nodes=[], idx=new Map();
   const skip=o=>o.isSprite||o.isPoints||o.isLine||(o.material&&(o.material.isShaderMaterial||o.material.colorWrite===false));
@@ -64,10 +57,16 @@ window.__bake = async (FPS=15) => {
   const same=(a,b)=>a&&b&&a.every((x,j)=>Math.abs(x-b[j])<1e-5);
   const matMax=new Map();
   for(let f=0;f<=frames;f++){ VT=f/FPS; const t=VT;
-    cards.forEach((c,i)=>{ const q=pose(i,t); const bob=Math.sin(t*1.3+i*1.2)*.005; c.position.copy(q.p); c.position.y+=q.s>.05?bob:0; c.scale.setScalar(q.s); c.rotation.set(q.rx,0,0); });
-    scenes.forEach((h,i)=>{ const k=sceneScale(i,t); h.scale.setScalar(k); h.rotation.y=(1-k)*-.6; if(k>.0002) h.userData.L.forEach(fn=>fn(t)); });
-    const o=doorOpen(t); doors.forEach(d=>d.scale.x=Math.max(.0001,1-o));
-    rim.material.opacity=.55+.45*Math.sin(t*2)**2;
+    const rip=eout(seg(t,RIP[0],RIP[1]))*(1-ease(seg(t,GONE[0],GONE[1])));
+    pondG.scale.setScalar(Math.max(1e-4,rip)); rings.forEach((g,k)=>{ const e=eout(seg(t,RIP[0]+k*.18,RIP[1]+k*.18))*(1-ease(seg(t,GONE[0]+k*.1,GONE[1]))); g.scale.setScalar(Math.max(1e-4,e*(1+.025*Math.sin(t*1.6-k*.9)))); });
+    // the card: rises at the start, sinks as the first scene opens, returns at the end and sinks again before the loop
+    const cin=Math.max(eout(seg(t,CARD[0],CARD[1]))*(1-ease(seg(t,OUT[0],OUT[1]))), eout(seg(t,BACK[0],BACK[1]))*(1-ease(seg(t,GONE[0],GONE[1]-.3))));
+    card.scale.setScalar(Math.max(1e-4,cin)); card.position.set(0,.004+Math.sin(t*1.2)*.004*cin,0); card.rotation.y=Math.sin(t*.55)*.45;
+    const sin=Math.max(eout(seg(t,SIGN[0],SIGN[1]))*(1-ease(seg(t,OUT[0]-.3,OUT[1]-.3))), eout(seg(t,BACK[0]+.4,BACK[1]+.4))*(1-ease(seg(t,GONE[0]-.4,GONE[1]-.6))));
+    sign.scale.setScalar(Math.max(1e-4,sin)); sign.position.set(0,.27+.03*(1-sin)+Math.sin(t*1.4)*.003,0); sign.lookAt(cam.x,sign.position.y,cam.z);
+    scenes.forEach((h,i)=>{ const k=sceneK(i,t); h.scale.setScalar(Math.max(1e-4,k)); h.rotation.y=(1-k)*-.7; if(k>.0002) h.userData.L.forEach(fn=>fn(t));
+      const lab=h.userData.lab, lk=eout(seg(t,sStart(i)+.5,sStart(i)+1.5))*(1-ease(seg(t,sStart(i)+PER-FOLD,sStart(i)+PER-FOLD+.6)));
+      lab.scale.setScalar(Math.max(1e-4,lk)); lab.position.set(0,.36+.02*(1-lk),-.06); lab.lookAt(cam.x,lab.position.y,cam.z); });
     nodes.forEach((n,j)=>{ const k=key(n.o);
       if(f===0){ n.samples.push([0,...k]); n.last=k; n.lastF=0; }
       else if(!same(k,n.last)){ if(n.lastF<f-1) n.samples.push([f-1,...n.last]); n.samples.push([f,...k]); n.last=k; n.lastF=f; }
@@ -87,7 +86,7 @@ window.__bake = async (FPS=15) => {
     let avg=null; if(ca){ let r=0,gg=0,b=0; for(let i=0;i<ca.count;i++){ r+=ca.getX(i); gg+=ca.getY(i); b+=ca.getZ(i); } avg=[r/ca.count,gg/ca.count,b/ca.count]; }
     G.push({p:r5(pa.array),n:na?r5(na.array):null,uv:ua?r5(ua.array):null,i:g.index?Array.from(g.index.array):null,avg}); return id; };
   const matId=(m,g)=>{ if(mats.has(m)) return mats.get(m); const id=M.length; mats.set(m,id);
-    const basic=m.isMeshBasicMaterial; const op=m.transparent?Math.max(.02,matMax.get(m)??m.opacity):1;
+    const basic=m.isMeshBasicMaterial; const op=m.userData.solid?1:m.transparent?Math.max(.02,matMax.get(m)??m.opacity):1;
     M.push({basic,color:hex(m.color),map:texId(m.map),rough:m.roughness??1,metal:m.metalness??0,clear:m.clearcoat??0,clearR:m.clearcoatRoughness??0,
       emis:m.emissive?hex(m.emissive.clone().multiplyScalar(m.emissiveIntensity??1)):null,opacity:+op.toFixed(3),alphaTest:m.alphaTest||0,
       vcol:!!m.vertexColors,double:m.side===T.DoubleSide,additive:m.blending===T.AdditiveBlending}); return id; };

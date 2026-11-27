@@ -158,7 +158,7 @@ const LOGO = new Image(); LOGO.src = 'zen-logo.svg';
 let stream = null, targetURL = null;
 const wait = ms => new Promise(r=>setTimeout(r,ms));
 let actx=null, xrOK=false, inXR=false;
-if(navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-ar').then(v=>{ xrOK=v; if(!v){ $('devnote').textContent='works best at a table, in good light.';
+if(navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-ar').then(v=>{ xrOK=v; if(!v && !(window.IOS_QL)){ $('devnote').textContent='works best at a table, in good light.';
       document.querySelector('h1').textContent='welcome to zen. your card is ready.'; $('go').textContent='open my welcome'; } }).catch(()=>{});
 function beep(freqs=[880,1320], dur=.09){ try{ ZA.note(freqs,dur); }catch(e){} }
 /* ---------------- sound: calm lounge music, soft ui taps, opening chimes and per-scene ambience ---------------- */
@@ -260,8 +260,10 @@ addEventListener('click',e=>{ if(e.target.closest&&e.target.closest('button')) Z
    on a loop. it is built by tools/usdz (bake.js -> build_usdz.py). the interactive card-tracking version stays one tap away. */
 const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 const QL=(()=>{ try{ return document.createElement('a').relList.supports('ar'); }catch(e){ return false; } })();
-if(IOS && QL){ $('go').textContent='view your welcome in ar'; $('goLive').style.display='block';
-  $('devnote').textContent='point your phone at a table. your welcome plays right there. pinch to resize, it loops.';
+if(IOS && QL){ window.IOS_QL=1; $('go').textContent='tap to enter zen'; $('goLive').style.display='block';
+  document.querySelector('#intro h1').textContent='welcome to zen. see what you get.';
+  document.querySelector('#intro .list').innerHTML='<li><i>1</i>tap below and point your phone at a table</li><li><i>2</i>a ripple spreads and your zen card rises</li><li><i>3</i>watch each perk open up out of the ripple</li><li><i>4</i>pinch to resize, walk around it. it loops.</li>';
+  $('devnote').textContent='opens in your iphone\'s own ar view.';
   $('goLive').onclick=()=>liveGo(); }
 $('go').onclick = async () => { if(IOS && QL){ try{ actx=ZA.ctx()||actx; }catch(e){} $('qlA').click(); return; } return liveGo(); };
 async function liveGo(){
@@ -341,7 +343,7 @@ function frame(now){ if(!inXR) step(now); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
 
 /* ---------------- textures ---------------- */
-function tex(w,h,draw){ const c=document.createElement('canvas'); c.width=w; c.height=h; draw(c.getContext('2d'),w,h);
+function tex(w,h,draw){ const k=window.__texScale||1, c=document.createElement('canvas'); c.width=w*k; c.height=h*k; const x=c.getContext('2d'); x.scale(k,k); draw(x,w,h);
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8; return t; }
 function rr(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
 function fluted(c,w,h,a=.12,step=24){ c.save(); c.globalAlpha=a; c.fillStyle='#fff'; for(let x=0;x<w;x+=step) c.fillRect(x,0,step*.4,h); c.restore(); }
@@ -789,12 +791,14 @@ const _tok={}; function tokTex(sym,bg='#00BD5F',fg='#FFFFFF'){ const k=sym+bg+fg
   c.strokeStyle='rgba(255,255,255,.75)'; c.lineWidth=6; c.beginPath(); c.arc(80,80,62,0,7); c.stroke(); c.fillStyle=fg; c.font='700 '+(sym.length>2?46:sym.length>1?58:76)+'px '+FONT; c.textAlign='center'; c.textBaseline='middle'; c.fillText(sym,80,84); })); }
 function coin(p,sym,x,y,z,r=.018,col=P.green){ const g=grp(p,x,y,z); const c=add(g,new THREE.CylinderGeometry(r,r,r*.28,32),col,0,0,0,Math.PI/2,0,0);
   [1,-1].forEach(s=>{ const f=plane(r*1.9,r*1.9,tokTex(sym)); f.position.z=s*r*.15; if(s<0) f.rotation.y=Math.PI; g.add(f); }); return g; }
-function zenCard(p,x,y,z,w=.17){ const g=grp(p,x,y,z); const h=w*.63;
-  box(g,w,h,.008,P.teal,0,0,0); box(g,w*.96,h*.16,.009,P.dark,0,h*.28,0);
-  const face=plane(w*.94,h*.9,tex(640,400,(c,W,H)=>{ c.fillStyle='rgba(255,255,255,.0)'; c.fillRect(0,0,W,H);
-    c.fillStyle='#E7C97A'; rr(c,52,150,92,70,12); c.fill(); c.strokeStyle='rgba(0,0,0,.25)'; c.lineWidth=3; c.beginPath(); c.moveTo(52,185); c.lineTo(144,185); c.moveTo(98,150); c.lineTo(98,220); c.stroke();
-    c.fillStyle='#FFFFFF'; c.font='600 76px '+FONT; c.fillText('zen',52,330); c.globalAlpha=.7; c.font='400 30px '+FONT; c.fillText('•••• 2026',W-230,330); }));
-  face.position.z=.0046; g.add(face); return g; }
+/* the real zen card (zen-card.png, portrait), standing upright: printed face on the front, mint back, a thin edge.
+   w is the card's width; it is always 1.585 times as tall */
+let _zcTex=null; const zcTex=()=>{ if(!_zcTex){ _zcTex=new THREE.TextureLoader().load('zen-card.png'); _zcTex.colorSpace=THREE.SRGBColorSpace; _zcTex.anisotropy=8; } return _zcTex; };
+function zenCard(p,x,y,z,w=.06){ const g=grp(p,x,y,z), h=w*1.585;
+  box(g,w*.985,h*.985,w*.012,P.mint,0,0,0);
+  const face=plane(w,h,zcTex(),{alphaTest:.5}); face.material=new THREE.MeshStandardMaterial({map:zcTex(),transparent:true,alphaTest:.5,roughness:.32,metalness:.1}); face.position.z=w*.0065; g.add(face);
+  const bk=plane(w,h,zcTex(),{alphaTest:.5}); bk.material=new THREE.MeshStandardMaterial({map:zcTex(),transparent:true,alphaTest:.5,roughness:.32,metalness:.1}); bk.rotation.y=Math.PI; bk.position.z=-w*.0065; g.add(bk);
+  return g; }
 const softRing=(p,r,col='#00BD5F')=>{ const m=add(p,new THREE.TorusGeometry(r,.0025,8,64),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.8,depthWrite:false})); return m; };
 
 /* cashback & rewards: a person taps their card at the terminal, coins arc back into a glass jar that fills, gift boxes open */
@@ -807,12 +811,12 @@ function buildCashback(world){
   const scr=plane(.03,.024,tex(200,160,(c,w,h)=>{ c.fillStyle='#0C3A31'; c.fillRect(0,0,w,h); c.fillStyle='#00BD5F'; c.beginPath(); c.arc(100,64,30,0,7); c.fill(); c.strokeStyle='#fff'; c.lineWidth=8; c.beginPath(); c.moveTo(86,64); c.lineTo(97,75); c.lineTo(116,54); c.stroke(); c.fillStyle='#CEE9D8'; c.font='500 26px '+FONT; c.textAlign='center'; c.fillText('approved',100,132); }));
   scr.position.set(0,.034,-.0172); scr.rotation.x=-.35; term.add(scr);
   const shopper=person(g,-.26,.04,Math.PI,P.lush2,0,'walk'); if(world) shopper.scale.setScalar(1.8);
-  const held=zenCard(shopper.userData.hand,0,0,0,.03); held.rotation.x=-1.2;
+  const held=zenCard(shopper.userData.hand,0,.01,0,.012);
   L.push(t=>{ hover(shopper,t); const k=(t%3.2)/3.2; shopper.userData.arms[1].rotation.x=-.5-Math.sin(Math.min(1,k*3)*Math.PI)*.6; });
   // the big card, standing on a plinth in the middle
   cyl(g,.07,.02,P.white,0,.01,-.13,40); cyl(g,.06,.004,P.teal,0,.022,-.13,40);
-  const big=zenCard(g,0,.14,-.13,.2); L.push(t=>{ big.rotation.y=Math.sin(t*.6)*.35; big.position.y=.14+Math.sin(t*1.1)*.006; });
-  const halo=softRing(g,.13); halo.position.set(0,.14,-.135); L.push(t=>{ halo.material.opacity=.35+Math.sin(t*2)*.15; });
+  const big=zenCard(g,0,.125,-.13,.1); L.push(t=>{ big.rotation.y=Math.sin(t*.6)*.35; big.position.y=.125+Math.sin(t*1.1)*.006; });
+  const halo=softRing(g,.1); halo.position.set(0,.125,-.135); L.push(t=>{ halo.material.opacity=.35+Math.sin(t*2)*.15; });
   // glass jar on the right, filling with coins
   const jar=grp(g,.26,0,-.04); cyl(jar,.06,.008,P.teal,0,.004,0,40);
   add(jar,new THREE.CylinderGeometry(.056,.056,.13,40,1,true),P.glass,0,.073,0); add(jar,new THREE.TorusGeometry(.056,.004,8,40),P.white,0,.138,0,Math.PI/2,0,0);
@@ -887,8 +891,8 @@ function buildIntl(world){
   const cur=['Rs','$','€','£','¥','AED'], orb=grp(gl); orb.rotation.x=.25; const toks=[];
   cur.forEach((s,i)=>{ const c=coin(orb,s,0,0,0,.02,i? P.teal : P.green); c.children.slice(1).forEach(f=>f.material.map=tokTex(s,i?'#006D5A':'#00BD5F')); toks.push(c); });
   L.push(t=>toks.forEach((c,i)=>{ const a=t*.3+i/cur.length*Math.PI*2; c.position.set(Math.cos(a)*.24,Math.sin(a*2)*.02,Math.sin(a)*.24); c.rotation.y=-a+Math.PI/2; }));
-  const pay=[]; for(let i=0;i<4;i++){ const p=zenCard(g,0,0,0,.035); pay.push(p); }
-  L.push(t=>pay.forEach((p,i)=>{ const k=((t*.25)+i/4)%1, a=i*1.7+t*.05, r=.04+k*.3; p.position.set(Math.cos(a)*r,.17+Math.sin(k*Math.PI)*.16,-.08+Math.sin(a)*r*.7); p.rotation.set(-.4,a,0);
+  const pay=[]; for(let i=0;i<4;i++){ const p=zenCard(g,0,0,0,.024); pay.push(p); }
+  L.push(t=>pay.forEach((p,i)=>{ const k=((t*.25)+i/4)%1, a=i*1.7+t*.05, r=.04+k*.3; p.position.set(Math.cos(a)*r,.17+Math.sin(k*Math.PI)*.16,-.08+Math.sin(a)*r*.7); p.rotation.set(0,a,0);
     p.scale.setScalar(k<.1?k/.1:k>.9?(1-k)/.1:1); }));
   // travellers with a suitcase, strolling past
   [[0,.05],[11,.045]].forEach(([off,spd],n)=>{ const w=person(g,.6,.14,0,P.lush2,0,'walk'); if(world) w.scale.setScalar(1.6);
@@ -1072,7 +1076,7 @@ function addMarquee(r,d){ const g=grp(r.g), w=MARQ[d.icon]||[d.title];
   return r; }
 INFO.forEach(d=>{ const f=d.build; d.build=w=>{ const r=f(w); if(!w) addMarquee(r,d); return r; }; });
 
-window.__zz={person,P,box,studioEnv,emblem,acrylic,INFO,tex,baseTex,holeTex,frameTex,signTex,roundedBox,FONT,LOGO,get PLANE(){ return PLANE; }};
+window.__zz={zenCard,person,P,box,studioEnv,emblem,acrylic,INFO,tex,baseTex,holeTex,frameTex,signTex,roundedBox,FONT,LOGO,get PLANE(){ return PLANE; }};
 /* ---------------- step 3: the ar experience ---------------- */
 function startAR(ar, cardTable){
   $('arwrap').innerHTML = `

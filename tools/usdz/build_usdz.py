@@ -23,12 +23,14 @@ texfile = {}
 for tid, t in d['texs'].items():
     if not t['url']: continue
     raw = base64.b64decode(t['url'].split(',', 1)[1]); im = Image.open(io.BytesIO(raw)); im.load()
-    if max(im.size) > 1024: im.thumbnail((1024, 1024), Image.LANCZOS)
+    if max(im.size) > 2048: im.thumbnail((2048, 2048), Image.LANCZOS)
     if im.mode == 'RGBA' and im.getextrema()[3][0] == 255: im = im.convert('RGB')     # fully opaque: jpeg is far smaller
     if im.mode == 'RGB':
         fn = tid + '.jpg'; im.save(os.path.join(work, 'tex', fn), quality=90)
     else:
-        fn = tid + '.png'; im.save(os.path.join(work, 'tex', fn), optimize=True)
+        fn = tid + '.png'
+        if t.get('quant', True): im = im.quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).convert('RGBA')   # 256-colour palette: text and flat art stay sharp at a fraction of the size
+        im.convert('RGBA').quantize(256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE).save(os.path.join(work, 'tex', fn), optimize=True)
     texfile[tid] = 'tex/' + fn
 
 # materials
@@ -58,11 +60,19 @@ def mk_mat(i, m, tint=None):
         tex.CreateInput('sourceColorSpace', Sdf.ValueTypeNames.Token).Set('sRGB')
         tex.CreateInput('scale', Sdf.ValueTypeNames.Float4).Set(Gf.Vec4f(col[0], col[1], col[2], 1))
         rgb = tex.CreateOutput('rgb', Sdf.ValueTypeNames.Float3); a = tex.CreateOutput('a', Sdf.ValueTypeNames.Float)
-    if m.get('basic'):   # unlit in the app: show it as light (emissive) over a dark base so it reads the same
-        sh.CreateInput('diffuseColor', Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0, 0, 0))
+    if m.get('basic'):   # unlit in the app (signs, text, glow): lit colour plus a little self-light, matte, so text stays crisp and solid
+        dc = sh.CreateInput('diffuseColor', Sdf.ValueTypeNames.Color3f); dc.ConnectToSource(rgb) if tex else dc.Set(col)
         e = sh.CreateInput('emissiveColor', Sdf.ValueTypeNames.Color3f)
-        e.ConnectToSource(rgb) if tex else e.Set(col)
-        sh.CreateInput('roughness', Sdf.ValueTypeNames.Float).Set(0.6)
+        if tex:
+            t2 = UsdShade.Shader.Define(stage, mat.GetPath().AppendChild('glow')); t2.CreateIdAttr('UsdUVTexture')
+            for k in ('file', 'st', 'wrapS', 'wrapT', 'sourceColorSpace'):
+                src = tex.GetInput(k); v = src.Get(); dst_in = t2.CreateInput(k, src.GetTypeName())
+                if src.HasConnectedSource(): dst_in.ConnectToSource(src.GetConnectedSource()[0].GetOutput(src.GetConnectedSource()[1]))
+                elif v is not None: dst_in.Set(v)
+            t2.CreateInput('scale', Sdf.ValueTypeNames.Float4).Set(Gf.Vec4f(.4, .4, .4, 1))
+            e.ConnectToSource(t2.CreateOutput('rgb', Sdf.ValueTypeNames.Float3))
+        else: e.Set(Gf.Vec3f(col[0] * .4, col[1] * .4, col[2] * .4))
+        sh.CreateInput('roughness', Sdf.ValueTypeNames.Float).Set(0.85)
     else:
         dc = sh.CreateInput('diffuseColor', Sdf.ValueTypeNames.Color3f)
         dc.ConnectToSource(rgb) if tex else dc.Set(col)
