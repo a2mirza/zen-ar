@@ -62,7 +62,7 @@ iPhone's main button opens `zen-welcome.usdz` in AR Quick Look (Apple's viewer a
 "or try the interactive version" runs the card-tracking flow. The usdz is baked from the live scenes, not hand-made:
 `python3 -m http.server 8771` then `node tools/usdz/bake.js` (records tools/usdz/record.js timeline at 15 fps into
 out/bake.json) then `python3 tools/usdz/build_usdz.py` (needs `pip install usd-core pillow`; writes zen-welcome.usdz).
-`node tools/usdz/preview.js 5 8 12` renders frames from the bake to check it. Timeline: cards rise, gather to a shelf,
+`node tools/usdz/preview.js 5 8 12` renders frames from the bake to check it. Timeline:
 a ripple spreads on the table (pond + rings), the real zen card (`zen-card.png`, always upright) rises with an
 "access granted / welcome to zen" sign, then each of the 7 scenes grows out of the ripple with a crisp title plate
 ("perk 0N of 07"), and finally the card and sign return before everything sinks (seamless ~63 s loop). Perk tiles are
